@@ -23,6 +23,7 @@ import {
   type Conversation,
   type ChatMessage,
 } from '@/api/chat'
+import { agentConfigApi } from '@/api/agentConfig'
 import { favoriteApi } from '@/api/favorites'
 import MessageItem from './chat/MessageItem'
 import type { UiMessage } from './chat/types'
@@ -51,6 +52,16 @@ export default function ChatPage() {
 
   useEffect(() => {
     loadConversations()
+  }, [])
+
+  // 读取 Agent 配置：联网搜索开关默认跟随用户在 Agent 配置里的设置
+  useEffect(() => {
+    agentConfigApi
+      .get()
+      .then(({ data }) => setWebSearch(data.enable_web_search))
+      .catch(() => {
+        // 取配置失败则保持默认关闭，不影响对话
+      })
   }, [])
 
   // 收藏深链：?conversation=&message= 打开会话并定位消息
