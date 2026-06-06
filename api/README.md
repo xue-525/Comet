@@ -23,7 +23,7 @@
 api/
 ├── app/
 │   ├── config.py            # pydantic-settings 配置，全部读自环境变量
-│   ├── main.py              # FastAPI 入口（create_app + lifespan：启动初始化 ES 索引 / Neo4j schema）
+│   ├── main.py              # FastAPI 入口（create_app + lifespan：启动自动跑 DB 迁移 + 初始化 ES 索引 / Neo4j schema）
 │   ├── celery_app.py        # Celery 多队列 + beat 定时配置
 │   │
 │   ├── controllers/         # 【路由层】只做路由、入参校验、调 service、包装响应
@@ -32,9 +32,13 @@ api/
 │   │   ├── document_controller.py      # 文档上传/网页导入/列表/详情/重试/删除/检索
 │   │   ├── image_controller.py         # 图片上传/列表/详情/删除/检索
 │   │   ├── tag_controller.py           # 标签 列表/改名改色/合并/删除
-│   │   ├── memory_controller.py        # 主动记住/画像/检索/社区/图谱/时间线
-│   │   ├── chat_controller.py          # 会话 CRUD + SSE 流式问答 + 传图
+│   │   ├── memory_controller.py        # 主动记住/画像/检索/社区/图谱/时间线/记忆巩固
+│   │   ├── chat_controller.py          # 会话 CRUD + SSE 流式问答 + 传图 + 消息反馈/重新生成
 │   │   ├── agent_config_controller.py  # Agent 提示词/温度/工具开关
+│   │   ├── tool_controller.py          # 内置工具配置（注册中心 + 开关）
+│   │   ├── mcp_controller.py           # MCP Server 配置 + 工具发现/测试
+│   │   ├── emotion_controller.py       # 当前情绪画像 / 趋势 / 记录 / 分布
+│   │   ├── music_controller.py         # 音乐推荐 + 曲库 CRUD + 上传 + 音源解析 + 咪咕搜索
 │   │   ├── search_controller.py        # 全局搜索
 │   │   ├── favorite_controller.py      # 收藏夹
 │   │   ├── dashboard_controller.py     # 统计概览 + 记忆趋势 + 每日回顾
@@ -46,7 +50,8 @@ api/
 │   ├── schemas/             # Pydantic 请求/响应模型
 │   ├── models/              # SQLAlchemy ORM 模型（users / model_configs / documents / images /
 │   │                        #   tags / memories / conversations / messages / agent_configs /
-│   │                        #   favorites / daily_reviews）
+│   │                        #   favorites / daily_reviews / message_feedbacks / tool_configs /
+│   │                        #   mcp_servers / emotion_records / emotion_profiles / songs）
 │   │
 │   ├── core/                # 【横切基础设施】
 │   │   ├── response.py      #   统一响应 success()/fail()
@@ -78,17 +83,29 @@ api/
 │   │   │   ├── clustering/      # 标签传播 LPA 社区聚类
 │   │   │   └── prompts/         # jinja2 提示词模板（纯中文）
 │   │   ├── agent/           #   智能问答 Agent（方案B）
-│   │   │   ├── tools.py     #     知识库 / 记忆 / 联网 三个 LangChain 工具
+│   │   │   ├── tools/       #     工具体系：注册中心 + 知识库/记忆/联网/内置工具 + MCP 适配
 │   │   │   ├── web_search.py#     联网搜索（千帆 / tavily）
 │   │   │   ├── orchestrator.py # 强模型 function calling + 弱模型 ReAct 降级
-│   │   │   └── prompts/     #     ReAct 提示词
+│   │   │   └── prompts/     #     ReAct + 提示词优化器 模板
+│   │   ├── emotion/         #   情绪记忆（valence-arousal）
+│   │   │   ├── ontology.py  #     13 类主情绪 + 参考坐标词表
+│   │   │   ├── analyzer.py  #     LLM 单轮情绪分析（重试 + 健壮解析 + 中性兜底）
+│   │   │   ├── aggregator.py#     最近 N 条滚动聚合为当前画像
+│   │   │   └── prompts/     #     情绪抽取模板
+│   │   ├── music/           #   情绪化音乐推荐
+│   │   │   ├── migu_client.py #   咪咕搜索 / listenSong 取免费直链 / 歌词
+│   │   │   ├── mood_tagger.py #   LLM 给歌标 valence/arousal/标签
+│   │   │   ├── recommender.py #   情绪距离 + 偏好歌手 打分排序
+│   │   │   └── prompts/     #     歌曲情绪标注模板
 │   │   └── storage/         #   文件存储抽象（本地 LocalStorage / 阿里云 OssStorage + 工厂）
 │   │
 │   ├── tasks/               # Celery 异步任务
 │   │   ├── parse.py         #   文档解析全流程
 │   │   ├── image.py         #   图片处理全流程
 │   │   ├── memory.py        #   记忆萃取
-│   │   └── beat.py          #   每日回顾 / 定时全量聚类
+│   │   ├── emotion.py       #   对话情绪分析 + 画像刷新
+│   │   ├── music.py         #   歌曲处理（补封面歌词 + 情绪标注 + 音源验证）
+│   │   └── beat.py          #   定时：每日回顾 / 全量社区聚类 / 记忆巩固
 │   │
 │   └── db/                  # 四存储连接：postgres / elastic / neo4j / redis（含连接池配置）
 │
@@ -220,24 +237,26 @@ uv run alembic upgrade head                          # 应用
 
 > 新建 model 后要在 `models/__init__.py` 注册导入，否则 autogenerate 检测不到。
 > `alembic.ini` 保持纯 ASCII（Windows GBK 读取，中文会报错）。
+> 后端启动时会自动执行 `alembic upgrade head`（`app/db/migrate.py`，在 lifespan 里）——本地首次仍建议手动跑一次确认无误。
 
 ---
 
 ## Celery 异步任务
 
-耗时操作（文档解析、记忆萃取、社区聚类）走异步队列，接口立即返回。
+耗时操作（文档解析、记忆萃取、情绪分析、歌曲处理、社区聚类）走异步队列，接口立即返回。
 
-队列规划：`parse`（解析/图片）、`memory`（记忆萃取）、`beat`（定时聚类/回顾）、`default`。
+队列规划：`parse`（解析 / 图片 / 歌曲处理）、`memory`（记忆萃取 / 情绪分析）、`beat`（定时：每日回顾 / 全量聚类 / 记忆巩固）、`default`。
 
 ```bash
 # Worker（Windows 必须 --pool=solo）
 uv run celery -A app.celery_app.celery_app worker -l info -Q default,parse,memory,beat --pool=solo
 
-# Beat 定时（每日 22:00 回顾、每日 03:00 全量聚类）
+# Beat 定时（每日 22:00 回顾、03:00 全量聚类、04:00 记忆巩固）
 uv run celery -A app.celery_app.celery_app beat -l info
 ```
 
 > Linux / macOS 去掉 `--pool=solo`，用 `--concurrency=N` 提并发。
+> 新增/改动 `tasks/` 下的任务后需重启 worker 才会加载。
 
 ---
 
