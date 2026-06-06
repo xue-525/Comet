@@ -3,6 +3,7 @@ import {
   AppstoreOutlined,
   BookOutlined,
   CommentOutlined,
+  CustomerServiceOutlined,
   DeploymentUnitOutlined,
   HddOutlined,
   LogoutOutlined,
@@ -16,6 +17,7 @@ import {
 } from '@ant-design/icons'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
+import MusicPlayer from '@/components/MusicPlayer'
 import logo from '@/images/logo.png'
 
 const { Sider, Content, Header } = Layout
@@ -38,6 +40,7 @@ const menuItems = [
       { key: '/images', icon: <PictureOutlined />, label: '图片库' },
       { key: '/memory', icon: <HddOutlined />, label: '记忆' },
       { key: '/graph', icon: <DeploymentUnitOutlined />, label: '知识图谱' },
+      { key: '/music', icon: <CustomerServiceOutlined />, label: '音乐' },
     ],
   },
   {
@@ -65,6 +68,9 @@ export default function MainLayout() {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
 
+  // 音乐页沉浸式深色主题：进入 /music 整体变深色霓虹，离开自动恢复
+  const immersive = location.pathname === '/music'
+
   const onLogout = async () => {
     await logout()
     message.success('已退出登录')
@@ -72,13 +78,19 @@ export default function MainLayout() {
   }
 
   return (
-    <Layout style={{ height: '100vh' }}>
+    <Layout style={{ height: '100vh' }} className={immersive ? 'immersive-layout' : ''}>
       <Sider
         width={236}
         style={{
           display: 'flex',
           flexDirection: 'column',
-          borderInlineEnd: '1px solid #f0f0f0',
+          borderInlineEnd: immersive
+            ? '1px solid rgba(255,255,255,0.08)'
+            : '1px solid #f0f0f0',
+          background: immersive
+            ? 'linear-gradient(180deg, #141633 0%, #0c0d18 100%)'
+            : undefined,
+          transition: 'background 0.4s',
         }}
       >
         <div
@@ -89,7 +101,7 @@ export default function MainLayout() {
             alignItems: 'center',
             gap: 10,
             paddingInline: 20,
-            color: '#171719',
+            color: immersive ? '#fff' : '#171719',
           }}
         >
           <img
@@ -102,21 +114,30 @@ export default function MainLayout() {
         <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 12 }}>
           <Menu
             mode="inline"
+            theme={immersive ? 'dark' : 'light'}
             selectedKeys={[location.pathname]}
             items={menuItems}
             onClick={({ key }) => navigate(key)}
-            style={{ borderInlineEnd: 'none' }}
+            style={{
+              borderInlineEnd: 'none',
+              background: 'transparent',
+            }}
           />
         </div>
       </Sider>
-      <Layout>
+      <Layout style={{ background: immersive ? '#0b0c16' : undefined, transition: 'background 0.4s' }}>
         <Header
           style={{
             paddingInline: 24,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            borderBottom: '1px solid #f0f0f0',
+            borderBottom: immersive
+              ? '1px solid rgba(255,255,255,0.08)'
+              : '1px solid #f0f0f0',
+            background: immersive ? 'rgba(18,20,40,0.8)' : undefined,
+            backdropFilter: immersive ? 'blur(10px)' : undefined,
+            transition: 'background 0.4s',
           }}
         >
           <Input.Search
@@ -144,7 +165,9 @@ export default function MainLayout() {
               <Avatar size={30} style={{ background: '#155EEF' }}>
                 {user?.username?.[0]?.toUpperCase() ?? <UserOutlined />}
               </Avatar>
-              <span style={{ fontWeight: 500 }}>{user?.username ?? '用户'}</span>
+              <span style={{ fontWeight: 500, color: immersive ? '#fff' : undefined }}>
+                {user?.username ?? '用户'}
+              </span>
             </Space>
           </Dropdown>
         </Header>
@@ -152,6 +175,7 @@ export default function MainLayout() {
           <Outlet />
         </Content>
       </Layout>
+      <MusicPlayer />
     </Layout>
   )
 }

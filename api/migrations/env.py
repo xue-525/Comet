@@ -22,6 +22,7 @@ from app.models import (  # noqa: F401
     memory_model,
     message_feedback_model,
     model_config_model,
+    song_model,
     tag_model,
     tool_config_model,
     user_model,

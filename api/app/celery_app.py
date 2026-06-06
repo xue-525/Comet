@@ -20,6 +20,7 @@ celery_app = Celery(
         "app.tasks.image",
         "app.tasks.memory",
         "app.tasks.emotion",
+        "app.tasks.music",
         "app.tasks.beat",
     ],
 )
@@ -37,6 +38,7 @@ celery_app.conf.update(
         "app.tasks.image.*": {"queue": "parse"},
         "app.tasks.memory.*": {"queue": "memory"},
         "app.tasks.emotion.*": {"queue": "memory"},
+        "app.tasks.music.*": {"queue": "parse"},
         "app.tasks.beat.*": {"queue": "beat"},
     },
     # Celery beat 定时
