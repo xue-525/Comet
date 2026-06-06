@@ -95,6 +95,26 @@ StructuredTool.from_function(
 
 ---
 
+## 三点五、工具体系开放化：内置注册中心 + MCP 接入（v0.0.2）
+
+把工具从「写死的三个」升级为「可插拔、可外接」的体系。
+
+### 1. 内置工具注册中心（`core/agent/tools/registry.py`）
+
+工具不再硬编码在一处，而是注册进统一的注册中心，按用户配置（`tool_configs` 表 + 工具配置页开关）动态装配进 Agent。除知识库/记忆/联网外，新增「当前时间」等内置工具，便于持续扩展。每个工具登记 name / description / 参数 schema / 执行函数，构建工具集时按开关筛选。
+
+### 2. MCP 工具完整接入（Model Context Protocol）
+
+**MCP 是什么**：Anthropic 提出的开放协议，标准化「LLM 应用 ↔ 外部工具/数据源」的连接方式。一个 MCP Server 暴露一组工具，任何 MCP 兼容客户端都能发现并调用——相当于「AI 工具界的 USB 接口」。
+
+**怎么接的**：用官方 `langchain-mcp-adapters`，支持 **SSE** 与 **Streamable HTTP** 两种传输。用户在 MCP 配置里登记外部 Server，系统连接后把该 Server 暴露的工具**动态转换成 LangChain Tool**，与内置工具一起进入同一套 Agent 编排循环——对编排层透明，模型像调内置工具一样调 MCP 工具，回答里也会标注实际调用了哪个 MCP 工具。
+
+**健壮性**：单个 MCP Server 连接/调用失败时 try/except 跳过并记 warning，不影响其余工具与主回答（「能降级就降级，不让局部失败炸掉整体」）。
+
+> 面试一句话：我把 Agent 工具做成了注册中心 + MCP 双来源——内置工具走注册中心按用户开关装配，外部能力通过官方 langchain-mcp-adapters 接入 MCP Server（SSE / Streamable HTTP）动态注册成 LangChain Tool，两者统一编排。MCP 是 LLM 连接外部工具的标准协议，接入后能复用整个 MCP 生态的工具。
+
+---
+
 ## 四、SSE 流式输出
 
 **为什么用 SSE 而不是 WebSocket**：问答是「服务端单向持续推送」场景，SSE（Server-Sent Events）基于 HTTP，比 WebSocket 轻量，浏览器原生支持自动重连，足够用。
