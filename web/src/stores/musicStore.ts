@@ -100,6 +100,14 @@ export const useMusicStore = create<MusicState>((set, get) => {
       list[idx] = resolved
       if (resolved.playable && resolved.url) {
         set({ playlist: list, track: resolved, playing: true, resolving: false })
+        // 上报播放历史（供每日回顾汇总；失败静默）
+        void musicApi
+          .recordPlay({
+            song_id: resolved.id,
+            title: resolved.title,
+            artist: resolved.artist,
+          })
+          .catch(() => {})
         return
       }
       // 这首没音源，继续找下一首；最后一轮则停在这并提示无音源

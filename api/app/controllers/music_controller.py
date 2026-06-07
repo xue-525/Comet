@@ -8,10 +8,23 @@ from app.core.dependencies import get_current_user
 from app.core.response import success
 from app.db.postgres import get_session
 from app.models.user_model import User
-from app.schemas.music_schema import SongCreate, SongUpdate
+from app.schemas.music_schema import PlayRecordRequest, SongCreate, SongUpdate
 from app.services.music_service import MusicService
 
 router = APIRouter(prefix="/music", tags=["music"])
+
+
+@router.post("/play-record")
+async def record_play(
+    body: PlayRecordRequest,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """上报一次播放（播放器开播时调用），用于每日回顾汇总听歌。"""
+    await MusicService(session).record_play(
+        user.id, body.title, body.artist, body.song_id
+    )
+    return success(message="ok")
 
 
 @router.get("/recommend")

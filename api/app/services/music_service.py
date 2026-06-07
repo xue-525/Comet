@@ -44,6 +44,25 @@ class MusicService:
         self.session = session
         self.repo = SongRepository(session)
 
+    async def record_play(
+        self, user_id: uuid.UUID, title: str, artist: str, song_id: str | None
+    ) -> None:
+        """上报一次播放（播放器开播时调用）。失败不致命。"""
+        from app.repositories.play_history_repository import PlayHistoryRepository
+
+        sid: uuid.UUID | None = None
+        if song_id:
+            try:
+                sid = uuid.UUID(song_id)
+            except (ValueError, TypeError):
+                sid = None
+        try:
+            await PlayHistoryRepository(self.session).add(
+                user_id, (title or "").strip()[:255], (artist or "").strip()[:255], sid
+            )
+        except Exception as e:
+            logger.warning("记录播放历史失败（忽略）: user=%s err=%s", user_id, e)
+
     # ---------- 曲库 CRUD ----------
 
     async def list_songs(

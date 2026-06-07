@@ -20,9 +20,9 @@ import {
   CaretRightOutlined,
   DeleteOutlined,
   EditOutlined,
+  HeartOutlined,
   PlusOutlined,
   TagsOutlined,
-  ThunderboltOutlined,
   UploadOutlined,
 } from '@ant-design/icons'
 import { musicApi, type MiguSearchHit, type Song } from '@/api/music'
@@ -171,15 +171,19 @@ export default function MusicLibraryPage() {
             >
               一键重新处理
             </Button>
-            <Button ghost icon={<ThunderboltOutlined />} onClick={() => recommend()}>
-              为我推荐
-            </Button>
             <Button
               type="primary"
               icon={<PlusOutlined />}
               onClick={() => setAddOpen(true)}
             >
               添加歌曲
+            </Button>
+            <Button
+              className="music-recommend-btn"
+              icon={<HeartOutlined />}
+              onClick={() => recommend()}
+            >
+              为此刻选歌
             </Button>
           </Space>
         </div>

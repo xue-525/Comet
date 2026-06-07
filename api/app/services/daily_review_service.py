@@ -13,16 +13,19 @@ from app.models.conversation_model import ROLE_USER, Conversation, Message
 from app.models.daily_review_model import DailyReview
 from app.models.document_model import Document
 from app.models.memory_model import Memory
+from app.models.play_history_model import PlayHistory
 
 logger = get_logger(__name__)
 
 _PROMPT = """你是用户的个人助理。请根据下面今天的活动数据，用中文写一段简短的「今日回顾」，
-像朋友一样自然、温暖，2-4 句话，可用 Markdown。不要罗列数字，要提炼今天聊了什么、记住了什么、学了什么。
+像朋友一样自然、温暖，2-4 句话，可用 Markdown。不要罗列数字，要提炼今天聊了什么、记住了什么、学了什么、听了什么歌，并结合今天的心情给一句贴心的感受或建议。
 
 今日数据：
 - 新对话消息（用户提问）：{messages}
 - 新记住的内容：{memories}
 - 新增文档：{documents}
+- 今天听的歌（{song_count} 首）：{songs}
+- 今天的心情：{mood}
 
 如果今天几乎没有活动，就回应一句轻松的鼓励。"""
 
@@ -72,7 +75,54 @@ class DailyReviewService:
         )
         documents = [r[0] for r in doc_rows.all()]
 
-        return {"messages": messages, "memories": memories, "documents": documents}
+        # 今天听的歌（去重歌名，保留顺序）
+        song_rows = await self.session.execute(
+            select(PlayHistory.title, PlayHistory.artist)
+            .where(
+                PlayHistory.user_id == user_id,
+                PlayHistory.played_at >= start,
+                PlayHistory.played_at <= end,
+            )
+            .order_by(PlayHistory.played_at.asc())
+        )
+        seen: set[str] = set()
+        songs: list[str] = []
+        for title, artist in song_rows.all():
+            label = f"{title}（{artist}）" if artist else title
+            if label not in seen:
+                seen.add(label)
+                songs.append(label)
+
+        return {
+            "messages": messages,
+            "memories": memories,
+            "documents": documents,
+            "songs": songs,
+        }
+
+    async def _collect_mood(self, user_id: uuid.UUID) -> str:
+        """取今天的情绪画像，转成给 LLM 的一句话描述；无数据返回空串。"""
+        try:
+            from app.services.emotion_service import EmotionService
+
+            data = await EmotionService(self.session).trend(1)
+            points = data.get("points", [])
+            if not points:
+                return ""
+            today = points[-1]
+            if (today.get("count") or 0) <= 0:
+                return ""
+            v = today.get("avg_valence", 0.0)
+            if v >= 0.3:
+                tone = "整体偏积极愉悦"
+            elif v <= -0.3:
+                tone = "情绪略低落"
+            else:
+                tone = "情绪比较平稳"
+            return f"{tone}（效价 {v:.2f}，共 {today.get('count')} 条情绪记录）"
+        except Exception as e:
+            logger.warning("收集每日心情失败（忽略）: %s", e)
+            return ""
 
     async def _generate_content(
         self, user_id: uuid.UUID, data: dict
@@ -80,26 +130,34 @@ class DailyReviewService:
         """调用对话模型生成简报；无模型或失败则用规则兜底。"""
         from app.core.llm.resolver import get_optional_client_for_type
 
-        total = len(data["messages"]) + len(data["memories"]) + len(data["documents"])
+        songs = data.get("songs", [])
+        total = (
+            len(data["messages"])
+            + len(data["memories"])
+            + len(data["documents"])
+            + len(songs)
+        )
         if total == 0:
             return "今天还没有新动态，休息一下也很好 🌿"
 
+        mood = await self._collect_mood(user_id)
+
         client = await get_optional_client_for_type(self.session, user_id, "chat")
+        fallback = (
+            f"今天有 {len(data['messages'])} 次提问、"
+            f"记住了 {len(data['memories'])} 件事、"
+            f"新增了 {len(data['documents'])} 份文档、"
+            f"听了 {len(songs)} 首歌。"
+        )
         if not client:
-            return (
-                f"今天有 {len(data['messages'])} 次提问、"
-                f"记住了 {len(data['memories'])} 件事、"
-                f"新增了 {len(data['documents'])} 份文档。"
-            )
+            return fallback
         prompt = _PROMPT.format(
             messages="；".join(data["messages"][:20]) or "（无）",
             memories="；".join(data["memories"][:30]) or "（无）",
             documents="、".join(data["documents"]) or "（无）",
-        )
-        fallback = (
-            f"今天有 {len(data['messages'])} 次提问、"
-            f"记住了 {len(data['memories'])} 件事、"
-            f"新增了 {len(data['documents'])} 份文档。"
+            song_count=len(songs),
+            songs="、".join(songs[:20]) or "（无）",
+            mood=mood or "（暂无情绪数据）",
         )
         try:
             text = await client.chat(
@@ -133,6 +191,7 @@ class DailyReviewService:
             "messages": len(data["messages"]),
             "memories": len(data["memories"]),
             "documents": len(data["documents"]),
+            "songs": len(data.get("songs", [])),
         }
 
         if (
@@ -165,7 +224,7 @@ class DailyReviewService:
         old = old or {}
         return all(
             int(old.get(k, 0) or 0) == int(new.get(k, 0) or 0)
-            for k in ("messages", "memories", "documents")
+            for k in ("messages", "memories", "documents", "songs")
         )
 
     @staticmethod

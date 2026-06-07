@@ -133,6 +133,9 @@ export const musicApi = {
       `/music/songs/${id}/audio`,
     )
   },
+  recordPlay(payload: { song_id: string | null; title: string; artist: string }) {
+    return client.post<unknown, Wrapped<null>>('/music/play-record', payload)
+  },
   retagAll() {
     return client.post<unknown, Wrapped<{ dispatched: number; total: number }>>(
       '/music/songs/retag-all',

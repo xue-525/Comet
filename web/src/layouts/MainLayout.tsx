@@ -268,7 +268,7 @@ export default function MainLayout() {
               ],
             }}
           >
-            <Space style={{ cursor: 'pointer', flexShrink: 0 }}>
+            <Space align="center" style={{ cursor: 'pointer', flexShrink: 0 }}>
               {user?.avatar ? (
                 <AuthenticatedImage
                   src={user.avatar}
@@ -278,6 +278,7 @@ export default function MainLayout() {
                     height: 30,
                     borderRadius: '50%',
                     objectFit: 'cover',
+                    display: 'block',
                   }}
                 />
               ) : (
@@ -287,7 +288,7 @@ export default function MainLayout() {
               )}
               {!isMobile && (
                 <span style={{ fontWeight: 500, color: immersive ? '#fff' : undefined }}>
-                  {user?.username ?? '用户'}
+                  {user?.nickname || user?.username || '用户'}
                 </span>
               )}
             </Space>

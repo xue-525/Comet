@@ -77,3 +77,12 @@ class AuthService:
         updated = await self.repo.update_avatar(user, file_key)
         logger.info("用户更新头像: id=%s key=%s", user.id, file_key)
         return updated
+
+    async def update_nickname(self, user: User, nickname: str) -> User:
+        """更新昵称。"""
+        name = (nickname or "").strip()
+        if not name:
+            raise BizError("昵称不能为空", code=1008)
+        updated = await self.repo.update_nickname(user, name)
+        logger.info("用户更新昵称: id=%s", user.id)
+        return updated

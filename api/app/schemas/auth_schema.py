@@ -24,6 +24,10 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(min_length=6, max_length=128)
 
 
+class UpdateProfileRequest(BaseModel):
+    nickname: str = Field(min_length=1, max_length=64)
+
+
 class TokenPair(BaseModel):
     access_token: str
     refresh_token: str
@@ -35,6 +39,7 @@ class UserOut(BaseModel):
 
     id: uuid.UUID
     username: str
+    nickname: str | None = None
     email: str | None = None
     avatar: str | None = None
     created_at: datetime

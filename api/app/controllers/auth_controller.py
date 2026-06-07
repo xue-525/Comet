@@ -13,6 +13,7 @@ from app.schemas.auth_schema import (
     RefreshRequest,
     RegisterRequest,
     TokenPair,
+    UpdateProfileRequest,
     UserOut,
 )
 from app.services.auth_service import AuthService
@@ -61,6 +62,16 @@ async def logout(_: User = Depends(get_current_user)):
 @router.get("/me")
 async def me(user: User = Depends(get_current_user)):
     return success(_user_out(user))
+
+
+@router.put("/profile")
+async def update_profile(
+    body: UpdateProfileRequest,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    updated = await AuthService(session).update_nickname(user, body.nickname)
+    return success(_user_out(updated), "资料已更新")
 
 
 @router.put("/password")

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Card, Form, Input, Modal, Slider, Space, Switch, Typography, message } from 'antd'
+import { Button, Card, Form, Input, Modal, Slider, Space, Typography, message } from 'antd'
 import { ThunderboltOutlined } from '@ant-design/icons'
 import { agentConfigApi, type AgentConfig } from '@/api/agentConfig'
 
@@ -101,20 +101,9 @@ export default function AgentConfigPage() {
             <Slider min={0} max={2} step={0.1} marks={{ 0: '严谨', 1: '平衡', 2: '发散' }} />
           </Form.Item>
 
-          <Form.Item label="默认启用知识库检索" name="enable_knowledge" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-          <Form.Item label="默认启用记忆检索" name="enable_memory" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-          <Form.Item
-            label="默认启用联网搜索"
-            name="enable_web_search"
-            valuePropName="checked"
-            extra="需先在模型配置中添加联网搜索（websearch）配置"
-          >
-            <Switch />
-          </Form.Item>
+          <Typography.Paragraph type="secondary" style={{ fontSize: 13, marginTop: 4 }}>
+            想开关知识库 / 记忆 / 联网等工具，请到「工具配置」页统一管理。
+          </Typography.Paragraph>
 
           <Button type="primary" loading={saving} onClick={onSave}>
             保存

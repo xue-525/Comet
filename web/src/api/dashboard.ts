@@ -9,7 +9,7 @@ interface Wrapped<T> {
 export interface DailyReview {
   date: string
   content: string
-  stats: { messages: number; memories: number; documents: number } | null
+  stats: { messages: number; memories: number; documents: number; songs?: number } | null
   created_at: string
 }
 

@@ -111,25 +111,18 @@ class ChatService:
         body: ChatStreamRequest,
         citations: list[dict],
     ) -> list:
-        """按 agent 默认开关 + 本轮覆盖，构建启用的工具列表。
+        """构建启用的工具列表。
 
-        三个核心工具（知识库/记忆/联网）沿用 agent 配置默认 + 本轮 body 覆盖；
-        其余内置工具（时间等）及 MCP 工具由用户 tool_configs 持久启停决定。
+        工具启停统一由「工具配置页」(tool_configs) 管理，这里不再读 agent 的工具开关；
+        仅把对话页本轮的临时开关（如联网）作为 override 传入，优先级最高。
         """
-
-        def enabled(override: bool | None, default: bool) -> bool:
-            return default if override is None else override
-
-        a_know = agent.enable_knowledge if agent else True
-        a_mem = agent.enable_memory if agent else True
-        a_web = agent.enable_web_search if agent else False
-
-        # 核心三工具的最终启停作为本轮 overrides，保证与既有行为一致
-        overrides = {
-            "knowledge_search": enabled(body.enable_knowledge, a_know),
-            "memory_search": enabled(body.enable_memory, a_mem),
-            "web_search": enabled(body.enable_web_search, a_web),
-        }
+        overrides: dict[str, bool] = {}
+        if body.enable_knowledge is not None:
+            overrides["knowledge_search"] = body.enable_knowledge
+        if body.enable_memory is not None:
+            overrides["memory_search"] = body.enable_memory
+        if body.enable_web_search is not None:
+            overrides["web_search"] = body.enable_web_search
         return await build_enabled_tools(self.session, user_id, citations, overrides)
 
     async def stream_chat(

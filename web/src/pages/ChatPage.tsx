@@ -31,7 +31,6 @@ import {
   type Conversation,
   type ChatMessage,
 } from '@/api/chat'
-import { agentConfigApi } from '@/api/agentConfig'
 import { favoriteApi } from '@/api/favorites'
 import { AuthenticatedImage } from '@/components/AuthenticatedImage'
 import MessageItem from './chat/MessageItem'
@@ -108,14 +107,19 @@ export default function ChatPage() {
     loadConversations()
   }, [])
 
-  // 读取 Agent 配置：联网搜索开关默认跟随用户在 Agent 配置里的设置
+  // 读取联网搜索工具的默认启停（来自「工具配置」），作为对话联网开关默认值
   useEffect(() => {
-    agentConfigApi
-      .get()
-      .then(({ data }) => setWebSearch(data.enable_web_search))
-      .catch(() => {
-        // 取配置失败则保持默认关闭，不影响对话
-      })
+    import('@/api/tools').then(({ toolsApi }) => {
+      toolsApi
+        .list()
+        .then(({ data }) => {
+          const web = data.find((t) => t.tool_key === 'web_search')
+          if (web) setWebSearch(web.enabled)
+        })
+        .catch(() => {
+          // 取配置失败则保持默认关闭，不影响对话
+        })
+    })
   }, [])
 
   // 收藏深链：?conversation=&message= 打开会话并定位消息

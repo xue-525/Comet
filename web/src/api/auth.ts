@@ -10,6 +10,7 @@ interface Wrapped<T> {
 export interface UserInfo {
   id: string
   username: string
+  nickname: string | null
   email: string | null
   avatar: string | null
   created_at: string
@@ -45,6 +46,9 @@ export const authApi = {
       old_password: oldPassword,
       new_password: newPassword,
     })
+  },
+  updateProfile(nickname: string) {
+    return client.put<unknown, Wrapped<UserInfo>>('/auth/profile', { nickname })
   },
   uploadAvatar(file: File) {
     const form = new FormData()

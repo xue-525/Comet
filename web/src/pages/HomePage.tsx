@@ -233,7 +233,9 @@ export default function HomePage() {
     <div className="fluid-page">
       {/* 欢迎横幅 */}
       <div className="dash-hero">
-        <h2 className="dash-hero__title">你好，{user?.username ?? '朋友'} 👋</h2>
+        <h2 className="dash-hero__title">
+          你好，{user?.nickname || user?.username || '朋友'} 👋
+        </h2>
         <p className="dash-hero__sub">
           欢迎使用彗记 Comet —— 你的个人 AI 知识库与记忆助手。让 AI 记住你、读懂你的资料。
         </p>
@@ -248,6 +250,7 @@ export default function HomePage() {
             <span style={{ color: '#98A2B3', fontSize: 13 }}>
               对话 {review.stats.messages} · 记忆 {review.stats.memories} · 文档{' '}
               {review.stats.documents}
+              {review.stats.songs ? ` · 听歌 ${review.stats.songs}` : ''}
             </span>
           )
         }
@@ -336,24 +339,6 @@ export default function HomePage() {
             </Col>
           ))}
         </Row>
-      </Card>
-
-      {/* 今日回顾 */}
-      <Card
-        title="📅 今日回顾"
-        style={{ marginBottom: 22, borderRadius: 16 }}
-        extra={
-          review?.stats && (
-            <span style={{ color: '#98A2B3', fontSize: 13 }}>
-              对话 {review.stats.messages} · 记忆 {review.stats.memories} · 文档{' '}
-              {review.stats.documents}
-            </span>
-          )
-        }
-      >
-        <p style={{ margin: 0, color: '#475467', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
-          {review?.content ?? '加载中…'}
-        </p>
       </Card>
 
       {/* 图表区 */}

@@ -38,3 +38,9 @@ class UserRepository:
         await self.session.commit()
         await self.session.refresh(user)
         return user
+
+    async def update_nickname(self, user: User, nickname: str) -> User:
+        user.nickname = nickname
+        await self.session.commit()
+        await self.session.refresh(user)
+        return user

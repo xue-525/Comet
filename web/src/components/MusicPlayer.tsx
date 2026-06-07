@@ -4,11 +4,11 @@ import {
   CaretRightOutlined,
   CloseOutlined,
   CustomerServiceOutlined,
+  HeartOutlined,
   PauseOutlined,
   ShrinkOutlined,
   StepBackwardOutlined,
   StepForwardOutlined,
-  ThunderboltOutlined,
 } from '@ant-design/icons'
 import { useMusicStore } from '@/stores/musicStore'
 import { activeLineIndex, parseLrc } from '@/pages/music/lrc'
@@ -78,6 +78,16 @@ export default function MusicPlayer() {
   const lrcContainerRef = useRef<HTMLDivElement>(null)
   const [current, setCurrent] = useState(0)
   const [duration, setDuration] = useState(0)
+  // 手机端窄屏：迷你态把传输控制并到歌名后面，整体更紧凑
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= 768,
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)')
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
 
   const audioSrc = useAuthedSrc(track?.url)
   const coverSrc = useAuthedSrc(track?.coverUrl)
@@ -185,6 +195,9 @@ export default function MusicPlayer() {
     </div>
   )
 
+  // 手机端迷你态：控制按钮内联到歌名行后面，省去底部那一排
+  const inlineMini = isMobile && !expanded
+
   return (
     <>
       {track?.url && (
@@ -230,9 +243,11 @@ export default function MusicPlayer() {
                 ? '正在获取音源…'
                 : !playable && track
                   ? `${track.artist || '未知歌手'} · 暂无音源`
-                  : track?.artist || (loading ? '正在挑选…' : '点击「为我推荐」')}
+                  : track?.artist || (loading ? '正在挑选…' : '点击「为此刻选歌」')}
             </div>
           </div>
+          {/* 手机端迷你态：播放控制内联到歌名后面 */}
+          {inlineMini && transportControls}
           <Tooltip title={expanded ? '收起' : '展开'}>
             <div
               className="player-ctrl-btn text-only"
@@ -248,8 +263,8 @@ export default function MusicPlayer() {
           </Tooltip>
         </div>
 
-        {/* 迷你态：底部一行传输控制 */}
-        {!expanded && (
+        {/* 迷你态：底部一行传输控制（手机端已内联到顶部，故此处仅桌面端显示） */}
+        {!expanded && !inlineMini && (
           <div style={{ padding: '0 12px 12px', display: 'flex', justifyContent: 'center' }}>
             {transportControls}
           </div>
@@ -345,7 +360,7 @@ export default function MusicPlayer() {
               {transportControls}
             </div>
 
-            {/* 为我推荐 */}
+            {/* 为此刻选歌 */}
             <div
               className="player-ctrl-btn"
               style={{
@@ -362,7 +377,7 @@ export default function MusicPlayer() {
               }}
               onClick={() => recommend()}
             >
-              <ThunderboltOutlined /> 为我推荐
+              <HeartOutlined /> 为此刻选歌
             </div>
           </div>
         )}

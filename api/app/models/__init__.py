@@ -14,6 +14,7 @@ from app.models.mcp_server_model import MCPServer
 from app.models.memory_model import Memory
 from app.models.message_feedback_model import MessageFeedback
 from app.models.model_config_model import ModelConfig
+from app.models.play_history_model import PlayHistory
 from app.models.song_model import Song
 from app.models.tag_model import Tag, document_tags, image_tags
 from app.models.tool_config_model import ToolConfig
@@ -33,6 +34,7 @@ __all__ = [
     "Memory",
     "MessageFeedback",
     "ModelConfig",
+    "PlayHistory",
     "Song",
     "Tag",
     "document_tags",

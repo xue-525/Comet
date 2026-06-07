@@ -32,4 +32,12 @@ class SongUpdate(BaseModel):
     duration: int | None = Field(default=None, ge=0)
 
 
-__all__ = ["SongCreate", "SongUpdate"]
+class PlayRecordRequest(BaseModel):
+    """上报一次播放（播放器开播时调用）。"""
+
+    song_id: str | None = None
+    title: str = Field(min_length=1, max_length=255)
+    artist: str = Field(default="", max_length=255)
+
+
+__all__ = ["SongCreate", "SongUpdate", "PlayRecordRequest"]
