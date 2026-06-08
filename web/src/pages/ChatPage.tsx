@@ -12,6 +12,7 @@ import {
   message as antdMessage,
 } from 'antd'
 import {
+  ArrowUpOutlined,
   DeleteOutlined,
   DownOutlined,
   FileTextOutlined,
@@ -34,9 +35,12 @@ import {
 import { favoriteApi } from '@/api/favorites'
 import { AuthenticatedImage } from '@/components/AuthenticatedImage'
 import MessageItem from './chat/MessageItem'
-import type { UiMessage } from './chat/types'
+import type { ChatAvatars, UiMessage } from './chat/types'
 import { groupConversationsByDate } from './chat/groupByDate'
 import { useMusicStore } from '@/stores/musicStore'
+import { personaApi } from '@/api/personas'
+import { agentConfigApi } from '@/api/agentConfig'
+import { authApi } from '@/api/auth'
 
 export default function ChatPage() {
   const [params, setParams] = useSearchParams()
@@ -55,6 +59,8 @@ export default function ChatPage() {
   const [dragOver, setDragOver] = useState(false)
   const dragCounter = useRef(0)
   const [highlightId, setHighlightId] = useState<string | null>(null)
+  // 对话头像上下文（角色头像 + 用户头像 + 总开关）
+  const [avatars, setAvatars] = useState<ChatAvatars>({ show: false })
   // 移动端：会话列表收进抽屉，对话区占满
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= 768,
@@ -105,6 +111,30 @@ export default function ChatPage() {
 
   useEffect(() => {
     loadConversations()
+  }, [])
+
+  // 加载对话头像上下文：当前角色头像 + 用户头像 + 显示开关
+  const loadAvatars = async () => {
+    try {
+      const [pResp, cResp, meResp] = await Promise.all([
+        personaApi.list(),
+        agentConfigApi.get(),
+        authApi.me(),
+      ])
+      const active = pResp.data.find((p) => p.is_active)
+      setAvatars({
+        show: cResp.data.show_avatar,
+        personaName: active?.name,
+        personaAvatarUrl: active?.avatar_url ?? null,
+        userAvatarUrl: meResp.data.avatar ?? null,
+      })
+    } catch {
+      // 头像信息拉取失败不影响对话
+    }
+  }
+
+  useEffect(() => {
+    loadAvatars()
   }, [])
 
   // 读取联网搜索工具的默认启停（来自「工具配置」），作为对话联网开关默认值
@@ -590,7 +620,7 @@ export default function ChatPage() {
                     background: highlightId === m.id ? '#FFF7E6' : 'transparent',
                   }}
                 >
-                  <MessageItem msg={m} onRegenerate={onRegenerate} />
+                  <MessageItem msg={m} onRegenerate={onRegenerate} avatars={avatars} />
                 </div>
               ))}
             </div>
@@ -657,9 +687,9 @@ export default function ChatPage() {
                     onSend()
                   }
                 }}
-                placeholder="输入消息，Enter 发送，Shift+Enter 换行"
+                placeholder={isMobile ? '输入消息…' : '输入消息，Enter 发送，Shift+Enter 换行'}
                 variant="borderless"
-                autoSize={{ minRows: 2, maxRows: 8 }}
+                autoSize={{ minRows: isMobile ? 1 : 2, maxRows: isMobile ? 5 : 8 }}
                 style={{ fontSize: 16, padding: 0, resize: 'none' }}
               />
               <div
@@ -667,13 +697,13 @@ export default function ChatPage() {
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  marginTop: 10,
+                  marginTop: isMobile ? 4 : 10,
                 }}
               >
-                <Space size="large">
+                <Space size={isMobile ? 'small' : 'large'}>
                   <Upload accept="image/*" showUploadList={false} beforeUpload={onUploadImage as never}>
                     <Tooltip title="上传图片">
-                      <Button type="text" icon={<PictureOutlined style={{ fontSize: 19 }} />} />
+                      <Button type="text" size={isMobile ? 'small' : 'middle'} icon={<PictureOutlined style={{ fontSize: isMobile ? 17 : 19 }} />} />
                     </Tooltip>
                   </Upload>
                   <Upload
@@ -682,32 +712,46 @@ export default function ChatPage() {
                     beforeUpload={onUploadFile as never}
                   >
                     <Tooltip title="上传文档（仅本次对话，不进知识库）">
-                      <Button type="text" icon={<PaperClipOutlined style={{ fontSize: 19 }} />} />
+                      <Button type="text" size={isMobile ? 'small' : 'middle'} icon={<PaperClipOutlined style={{ fontSize: isMobile ? 17 : 19 }} />} />
                     </Tooltip>
                   </Upload>
                   <Tooltip title="联网搜索">
                     <Space size={6}>
                       <GlobalOutlined
-                        style={{ fontSize: 18, color: webSearch ? '#155EEF' : '#98A2B3' }}
+                        style={{ fontSize: isMobile ? 16 : 18, color: webSearch ? '#155EEF' : '#98A2B3' }}
                       />
                       <Switch size="small" checked={webSearch} onChange={setWebSearch} />
                     </Space>
                   </Tooltip>
                 </Space>
-                <Button
-                  type="primary"
-                  size="large"
-                  icon={<SendOutlined />}
-                  loading={sending}
-                  onClick={onSend}
-                >
-                  发送
-                </Button>
+                {isMobile ? (
+                  <Button
+                    type="primary"
+                    shape="circle"
+                    icon={<ArrowUpOutlined />}
+                    loading={sending}
+                    disabled={!input.trim()}
+                    onClick={onSend}
+                  />
+                ) : (
+                  <Button
+                    type="primary"
+                    size="large"
+                    icon={<SendOutlined />}
+                    loading={sending}
+                    onClick={onSend}
+                    className="chat-send-btn"
+                  >
+                    发送
+                  </Button>
+                )}
               </div>
             </div>
-            <div style={{ textAlign: 'center', fontSize: 12, color: '#98A2B3', marginTop: 8 }}>
-              内容由 AI 生成，请注意甄别
-            </div>
+            {!isMobile && (
+              <div style={{ textAlign: 'center', fontSize: 12, color: '#98A2B3', marginTop: 8 }}>
+                内容由 AI 生成，请注意甄别
+              </div>
+            )}
           </div>
         </div>
       </div>
