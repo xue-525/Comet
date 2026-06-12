@@ -36,6 +36,7 @@ async def search_memory(
     top_k: int = 10,
     recall_size: int = 20,
     min_vector_score: float | None = None,
+    query_vector: list[float] | None = None,
 ) -> list[dict]:
     """记忆检索：返回 top_k 个相关实体，每个带其一跳关系（关联事实）。
 
@@ -43,6 +44,8 @@ async def search_memory(
 
     min_vector_score 不为 None 时启用「绝对相关度门控」（精确导向，用于全局搜索）：
     只保留全文命中 或 向量余弦相似度 ≥ 阈值的实体。
+
+    query_vector 不为 None 时复用外部已算好的查询向量，避免重复 embedding 调用。
     """
     repo = MemoryGraphRepository()
     uid = str(user_id)
@@ -51,8 +54,8 @@ async def search_memory(
     vec_hits: dict[str, dict] = {}
     vec_scores: dict[str, float] = {}
     try:
-        query_vector = await embed_client.embed_one(query)
-        rows = await repo.search_entities_by_vector(uid, query_vector, recall_size)
+        qvec = query_vector if query_vector is not None else await embed_client.embed_one(query)
+        rows = await repo.search_entities_by_vector(uid, qvec, recall_size)
         for r in rows:
             vec_hits[r["id"]] = r
             vec_scores[r["id"]] = float(r.get("score", 0.0))

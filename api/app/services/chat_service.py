@@ -108,6 +108,66 @@ class ChatService:
                 out.append(AIMessage(content=m.content))
         return out
 
+    async def _cross_session_context(
+        self, user_id: uuid.UUID, current_conv_id: uuid.UUID
+    ) -> str:
+        """跨会话上下文：取最近其他会话的标题 + 最后几轮，拼成参考背景块。
+
+        纯 PG 查询（快），失败/无其他会话返回空串。
+        """
+        try:
+            from app.config import settings as _s
+            from app.models.conversation_model import ROLE_ASSISTANT, ROLE_USER
+
+            convs = await self.conv_repo.list_by_user(user_id)
+            others = [c for c in convs if c.id != current_conv_id][
+                : _s.cross_session_max_convs
+            ]
+            if not others:
+                return ""
+            blocks: list[str] = []
+            for c in others:
+                msgs = await self.msg_repo.recent_history(
+                    c.id, _s.cross_session_turns_per_conv
+                )
+                if not msgs:
+                    continue
+                lines = [f"〔会话「{c.title}」〕"]
+                for m in msgs:
+                    if m.role == ROLE_USER:
+                        lines.append(f"用户：{(m.content or '').strip()}")
+                    elif m.role == ROLE_ASSISTANT:
+                        lines.append(f"我：{(m.content or '').strip()}")
+                blocks.append("\n".join(lines))
+            if not blocks:
+                return ""
+            block = "【最近你还和我聊过（仅供参考，不必主动提起）】\n" + "\n\n".join(blocks)
+            if len(block) > _s.cross_session_max_chars:
+                block = block[: _s.cross_session_max_chars] + "…"
+            logger.info("跨会话上下文注入: user=%s 会话数=%d", user_id, len(blocks))
+            return block
+        except Exception as e:
+            logger.warning("跨会话上下文构建失败（忽略）: user=%s err=%s", user_id, e)
+            return ""
+
+    async def _recall_memory(self, user_id: uuid.UUID, query: str) -> str:
+        """主动记忆召回：失败不影响对话，返回空串。"""
+        try:
+            from app.core.llm.resolver import get_optional_client_for_type
+            from app.core.memory.retrieval.active_recall import recall_context
+
+            embed_client = await get_optional_client_for_type(
+                self.session, user_id, "embedding"
+            )
+            if embed_client is None:
+                return ""
+            return await recall_context(
+                embed_client=embed_client, user_id=user_id, query=query
+            )
+        except Exception as e:
+            logger.warning("主动记忆召回失败（忽略）: user=%s err=%s", user_id, e)
+            return ""
+
     @staticmethod
     def _compose_system_prompt(persona, skill) -> str:
         """组装 system prompt：角色卡人设 + 技能任务提示词 + few-shot 示例（叠加）。
@@ -231,10 +291,22 @@ class ChatService:
             system_prompt = self._compose_system_prompt(persona, skill)
             citations: list[dict] = []
             stats_holder: dict[str, dict] = {}
+            # 注：以下三步都用同一个 AsyncSession，不能并发（session 非并发安全）。
+            # 主动召回的慢点（embedding/Neo4j）走独立连接已加 3.5s 超时；MCP 工具按用户缓存避免每轮重连。
             tools = await self._build_tools(
                 user_id, agent, body, citations, stats_holder, skill=skill
             )
             history = await self._history_messages(conv.id)
+            # 主动记忆召回：每轮用当前问题检索相关记忆 + 洞察，注入 system prompt（开关控制）
+            if agent is None or agent.enable_active_recall:
+                recall = await self._recall_memory(user_id, user_text)
+                if recall:
+                    system_prompt = (system_prompt + "\n\n" + recall).strip()
+            # 跨会话上下文：注入最近其他会话摘要（默认关，开关控制）
+            if agent is not None and agent.enable_cross_session:
+                cross = await self._cross_session_context(user_id, conv.id)
+                if cross:
+                    system_prompt = (system_prompt + "\n\n" + cross).strip()
         except Exception as e:
             yield _sse("error", {"message": str(e)})
             return

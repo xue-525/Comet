@@ -12,6 +12,8 @@ export interface AgentConfig {
   enable_knowledge: boolean
   enable_memory: boolean
   enable_web_search: boolean
+  enable_active_recall: boolean
+  enable_cross_session: boolean
   show_avatar: boolean
 }
 

@@ -40,6 +40,10 @@ class AgentConfigService:
             config.enable_memory = body.enable_memory
         if body.enable_web_search is not None:
             config.enable_web_search = body.enable_web_search
+        if body.enable_active_recall is not None:
+            config.enable_active_recall = body.enable_active_recall
+        if body.enable_cross_session is not None:
+            config.enable_cross_session = body.enable_cross_session
         if body.show_avatar is not None:
             config.show_avatar = body.show_avatar
         return await self.repo.save(config)
@@ -87,5 +91,7 @@ class AgentConfigService:
             "enable_knowledge": config.enable_knowledge,
             "enable_memory": config.enable_memory,
             "enable_web_search": config.enable_web_search,
+            "enable_active_recall": config.enable_active_recall,
+            "enable_cross_session": config.enable_cross_session,
             "show_avatar": config.show_avatar,
         }

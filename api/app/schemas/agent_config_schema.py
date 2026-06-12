@@ -10,6 +10,8 @@ class AgentConfigUpdate(BaseModel):
     enable_knowledge: bool | None = None
     enable_memory: bool | None = None
     enable_web_search: bool | None = None
+    enable_active_recall: bool | None = None
+    enable_cross_session: bool | None = None
     show_avatar: bool | None = None
 
 

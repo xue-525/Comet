@@ -106,6 +106,17 @@ class Settings(BaseSettings):
     reflection_min_entities: int = 5  # 实体少于此数不反思（信息太少）
     reflection_trigger_threshold: int = 20  # 增量触发：累计新增记忆达标触发一次反思
 
+    # 记忆主动召回（对话每轮注入相关记忆 + 洞察）
+    active_recall_entity_top_k: int = 5  # 召回实体数
+    active_recall_insight_top_k: int = 2  # 召回洞察数
+    active_recall_min_score: float = 0.5  # 实体召回余弦门控（低于不注入，节流防噪声）
+    active_recall_max_chars: int = 600  # 注入背景块长度上限
+
+    # 跨会话上下文（注入最近其他会话的摘要，默认关）
+    cross_session_max_convs: int = 3  # 取最近几个其他会话
+    cross_session_turns_per_conv: int = 4  # 每会话取最后几轮
+    cross_session_max_chars: int = 1200  # 注入上限
+
     @property
     def database_url(self) -> str:
         return (

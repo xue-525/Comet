@@ -10,6 +10,8 @@ export default function AgentConfigPage() {
   const [personas, setPersonas] = useState<Persona[]>([])
   const [loading, setLoading] = useState(true)
   const [showAvatar, setShowAvatar] = useState(false)
+  const [activeRecall, setActiveRecall] = useState(true)
+  const [crossSession, setCrossSession] = useState(false)
   const [activatingId, setActivatingId] = useState<string | null>(null)
   const [editOpen, setEditOpen] = useState(false)
   const [editing, setEditing] = useState<Persona | null>(null)
@@ -23,6 +25,8 @@ export default function AgentConfigPage() {
       ])
       setPersonas(pResp.data)
       setShowAvatar(cResp.data.show_avatar)
+      setActiveRecall(cResp.data.enable_active_recall)
+      setCrossSession(cResp.data.enable_cross_session)
     } catch (e) {
       message.error((e as Error).message)
     } finally {
@@ -41,6 +45,26 @@ export default function AgentConfigPage() {
       await agentConfigApi.update({ show_avatar: v })
     } catch (e) {
       setShowAvatar(!v)
+      message.error((e as Error).message)
+    }
+  }
+
+  const onToggleActiveRecall = async (v: boolean) => {
+    setActiveRecall(v)
+    try {
+      await agentConfigApi.update({ enable_active_recall: v })
+    } catch (e) {
+      setActiveRecall(!v)
+      message.error((e as Error).message)
+    }
+  }
+
+  const onToggleCrossSession = async (v: boolean) => {
+    setCrossSession(v)
+    try {
+      await agentConfigApi.update({ enable_cross_session: v })
+    } catch (e) {
+      setCrossSession(!v)
       message.error((e as Error).message)
     }
   }
@@ -97,6 +121,24 @@ export default function AgentConfigPage() {
               </Tooltip>
             </span>
             <Switch checked={showAvatar} onChange={onToggleAvatar} />
+          </div>
+          <div className="persona-hero-switch">
+            <span>
+              主动记忆
+              <Tooltip title="开启后，每轮提问会自动检索与话题相关的记忆与「AI 眼中的你」，让回答更懂你；关闭则不注入">
+                <QuestionCircleOutlined style={{ marginLeft: 6, opacity: 0.7 }} />
+              </Tooltip>
+            </span>
+            <Switch checked={activeRecall} onChange={onToggleActiveRecall} />
+          </div>
+          <div className="persona-hero-switch">
+            <span>
+              跨会话上下文
+              <Tooltip title="开启后，提问时会参考你最近其他会话聊过的内容，跨会话也能接着聊；默认关闭，保持各会话独立">
+                <QuestionCircleOutlined style={{ marginLeft: 6, opacity: 0.7 }} />
+              </Tooltip>
+            </span>
+            <Switch checked={crossSession} onChange={onToggleCrossSession} />
           </div>
         </div>
       </div>

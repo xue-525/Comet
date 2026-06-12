@@ -75,6 +75,7 @@ class MCPService:
         )
         created = await self.repo.create(server)
         logger.info("创建 MCP 服务: user=%s name=%s id=%s", user_id, body.name, created.id)
+        self._invalidate_cache(user_id)
         return created
 
     async def update(
@@ -101,19 +102,34 @@ class MCPService:
                 )
             elif body.auth_type == "none":
                 server.auth_config = None
-        return await self.repo.save(server)
+        saved = await self.repo.save(server)
+        self._invalidate_cache(user_id)
+        return saved
 
     async def delete(self, user_id: uuid.UUID, server_id: uuid.UUID) -> None:
         server = await self._get_or_404(user_id, server_id)
         await self.repo.delete(server)
         logger.info("删除 MCP 服务: user=%s id=%s", user_id, server_id)
+        self._invalidate_cache(user_id)
 
     async def toggle(
         self, user_id: uuid.UUID, server_id: uuid.UUID, enabled: bool
     ) -> MCPServer:
         server = await self._get_or_404(user_id, server_id)
         server.enabled = enabled
-        return await self.repo.save(server)
+        saved = await self.repo.save(server)
+        self._invalidate_cache(user_id)
+        return saved
+
+    @staticmethod
+    def _invalidate_cache(user_id: uuid.UUID) -> None:
+        """清该用户 MCP 工具缓存（增删改/开关后调用），下次对话重新拉取最新工具。"""
+        try:
+            from app.core.agent.tools.mcp.loader import invalidate_mcp_cache
+
+            invalidate_mcp_cache(user_id)
+        except Exception:
+            pass
 
     async def test(
         self, user_id: uuid.UUID, server_id: uuid.UUID

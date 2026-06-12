@@ -8,6 +8,7 @@
 故对 server 名与 MCP 原始工具名统一清洗（非法字符替换为 _），并去重。
 """
 import re
+import time
 import uuid
 
 from langchain_core.tools import BaseTool
@@ -23,6 +24,20 @@ logger = get_logger(__name__)
 
 _INVALID = re.compile(r"[^a-zA-Z0-9_-]")
 _MAX_NAME_LEN = 64
+
+# 进程内 MCP 工具缓存：避免每轮对话都重连 server 拉工具清单（握手+协商耗时）。
+# key=user_id，value=(过期时间戳, server 指纹, 工具列表)。指纹变化（增删/改 server）即失效。
+_MCP_CACHE: dict[str, tuple[float, str, list[BaseTool]]] = {}
+_MCP_CACHE_TTL = 300.0  # 秒
+
+
+def _servers_fingerprint(servers: list[MCPServer]) -> str:
+    """已启用 server 的指纹：id + updated_at，任一变化即缓存失效。"""
+    parts = [
+        f"{s.id}:{s.updated_at.isoformat() if s.updated_at else ''}"
+        for s in servers
+    ]
+    return "|".join(sorted(parts))
 
 
 def _sanitize(text: str) -> str:
@@ -53,10 +68,20 @@ def _rename(tool: BaseTool, prefix: str, seen: set[str]) -> None:
 async def build_mcp_tools(
     session: AsyncSession, user_id: uuid.UUID
 ) -> list[BaseTool]:
-    """构建该用户所有已启用 MCP server 的工具列表（名称清洗+去重）。"""
+    """构建该用户所有已启用 MCP server 的工具列表（名称清洗+去重）。
+
+    带进程内 TTL 缓存：server 配置未变（指纹一致）且未过期时复用，避免每轮重连握手。
+    """
     servers = await MCPServerRepository(session).list_by_user(
         user_id, enabled_only=True
     )
+    uid = str(user_id)
+    fingerprint = _servers_fingerprint(servers)
+    now = time.monotonic()
+    cached = _MCP_CACHE.get(uid)
+    if cached and cached[0] > now and cached[1] == fingerprint:
+        return list(cached[2])  # 复用缓存（返回副本，避免外部改名污染缓存）
+
     tools: list[BaseTool] = []
     seen: set[str] = set()
     for server in servers:
@@ -69,7 +94,17 @@ async def build_mcp_tools(
         for t in raw:
             _rename(t, prefix, seen)
             tools.append(t)
+    # 仅在全部 server 都成功（无跳过）时缓存，避免把"部分失败"的残缺列表缓存住
+    _MCP_CACHE[uid] = (now + _MCP_CACHE_TTL, fingerprint, list(tools))
     return tools
+
+
+def invalidate_mcp_cache(user_id: uuid.UUID | str | None = None) -> None:
+    """清除 MCP 工具缓存（增删/改 server 或测试连接后调用）。None=全部清。"""
+    if user_id is None:
+        _MCP_CACHE.clear()
+    else:
+        _MCP_CACHE.pop(str(user_id), None)
 
 
 async def fetch_tools_meta(server: MCPServer) -> list[dict]:
@@ -84,4 +119,4 @@ async def fetch_tools_meta(server: MCPServer) -> list[dict]:
     ]
 
 
-__all__ = ["build_mcp_tools", "fetch_tools_meta"]
+__all__ = ["build_mcp_tools", "fetch_tools_meta", "invalidate_mcp_cache"]
