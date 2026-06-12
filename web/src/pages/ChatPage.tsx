@@ -24,6 +24,7 @@ import {
   PlusOutlined,
   RightOutlined,
   SendOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons'
 import {
   chatApi,
@@ -44,6 +45,7 @@ import { useChatHeaderStore } from '@/stores/chatHeaderStore'
 import { personaApi } from '@/api/personas'
 import { agentConfigApi } from '@/api/agentConfig'
 import { authApi } from '@/api/auth'
+import { useSkillStore } from '@/stores/skillStore'
 
 export default function ChatPage() {
   const [params, setParams] = useSearchParams()
@@ -55,6 +57,7 @@ export default function ChatPage() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [webSearch, setWebSearch] = useState(false)
+  const [activeSkillId, setActiveSkillId] = useState<string | null>(null)
   const [pendingImages, setPendingImages] = useState<{ key: string; url: string }[]>([])
   const [pendingFiles, setPendingFiles] = useState<
     { file_name: string; text: string }[]
@@ -71,6 +74,14 @@ export default function ChatPage() {
   const [convDrawerOpen, setConvDrawerOpen] = useState(false)
   // 播放器可见时，输入区在手机上需上移避让
   const playerVisible = useMusicStore((s) => s.visible)
+  // 技能（任务能力包）：对话中可挂载/切换
+  const skills = useSkillStore((s) => s.list)
+  const ensureSkillsLoaded = useSkillStore((s) => s.ensureLoaded)
+  useEffect(() => {
+    ensureSkillsLoaded()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const activeSkill = skills.find((s) => s.id === activeSkillId) ?? null
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)')
     const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
@@ -448,8 +459,8 @@ export default function ChatPage() {
     }
   }
 
-  const onSend = async () => {
-    const text = input.trim()
+  const onSend = async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim()
     if (!text || sending) return
     setSending(true)
     setInput('')
@@ -483,6 +494,7 @@ export default function ChatPage() {
       {
         conversationId: convId,
         message: text,
+        skillId: activeSkillId,
         imageKeys: imgs.map((i) => i.key),
         attachments: files,
         enableWebSearch: webSearch,
@@ -711,6 +723,68 @@ export default function ChatPage() {
           }`}
         >
           <div className="fluid-narrow" style={{ padding: '0 24px' }}>
+            {/* 技能选择器 + 快捷开场提问 */}
+            <div className="chat-skill-bar">
+              <Popover
+                trigger="click"
+                placement="topLeft"
+                content={
+                  <div className="chat-skill-menu">
+                    <div
+                      className={`chat-skill-opt${!activeSkillId ? ' active' : ''}`}
+                      onClick={() => setActiveSkillId(null)}
+                    >
+                      <span>🚫 不挂载技能</span>
+                    </div>
+                    {skills.length === 0 && (
+                      <div className="chat-skill-empty">
+                        还没有技能，去「技能」页创建
+                      </div>
+                    )}
+                    {skills.map((s) => (
+                      <div
+                        key={s.id}
+                        className={`chat-skill-opt${
+                          activeSkillId === s.id ? ' active' : ''
+                        }`}
+                        onClick={() => setActiveSkillId(s.id)}
+                      >
+                        <span>
+                          {s.icon} {s.name}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                }
+              >
+                <button
+                  className={`chat-skill-trigger${activeSkill ? ' on' : ''}`}
+                >
+                  <ThunderboltOutlined />
+                  {activeSkill ? `${activeSkill.icon} ${activeSkill.name}` : '技能'}
+                </button>
+              </Popover>
+              {activeSkill && (
+                <button
+                  className="chat-skill-clear"
+                  onClick={() => setActiveSkillId(null)}
+                  title="卸载技能"
+                >
+                  <CloseOutlined />
+                </button>
+              )}
+              {/* 快捷开场提问 */}
+              {activeSkill?.config?.quick_prompts?.map((qp, i) => (
+                <button
+                  key={i}
+                  className="chat-quick-prompt"
+                  disabled={sending}
+                  onClick={() => onSend(qp)}
+                >
+                  {qp}
+                </button>
+              ))}
+            </div>
             {pendingImages.length > 0 && (
               <Space wrap style={{ marginBottom: 10 }}>
                 {pendingImages.map((img, i) => (
@@ -823,7 +897,7 @@ export default function ChatPage() {
                     icon={<ArrowUpOutlined />}
                     loading={sending}
                     disabled={!input.trim()}
-                    onClick={onSend}
+                    onClick={() => onSend()}
                     style={{ flexShrink: 0 }}
                   />
                 </div>
@@ -880,7 +954,7 @@ export default function ChatPage() {
                       size="large"
                       icon={<SendOutlined />}
                       loading={sending}
-                      onClick={onSend}
+                      onClick={() => onSend()}
                       className="chat-send-btn"
                     >
                       发送

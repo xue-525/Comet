@@ -16,6 +16,7 @@ import {
   SearchOutlined,
   SettingOutlined,
   StarOutlined,
+  ThunderboltOutlined,
   ToolOutlined,
   UserOutlined,
 } from '@ant-design/icons'
@@ -64,6 +65,7 @@ const menuItems = [
     children: [
       { key: '/settings/models', icon: <SettingOutlined />, label: '模型配置' },
       { key: '/settings/agent', icon: <RobotOutlined />, label: 'Agent 配置' },
+      { key: '/settings/skills', icon: <ThunderboltOutlined />, label: '技能' },
       { key: '/settings/tools', icon: <ToolOutlined />, label: '工具配置' },
     ],
   },

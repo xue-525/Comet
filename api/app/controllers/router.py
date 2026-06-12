@@ -23,6 +23,7 @@ from app.controllers import (
     model_config_controller,
     music_controller,
     search_controller,
+    skill_controller,
     tag_controller,
     tool_controller,
 )
@@ -47,3 +48,4 @@ api_router.include_router(favorite_controller.router)
 api_router.include_router(dashboard_controller.router)
 api_router.include_router(emotion_controller.router)
 api_router.include_router(music_controller.router)
+api_router.include_router(skill_controller.router)

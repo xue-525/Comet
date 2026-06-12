@@ -35,6 +35,7 @@ from app.repositories.conversation_repository import (
     ConversationRepository,
     MessageRepository,
 )
+from app.repositories.skill_repository import SkillRepository
 from app.schemas.chat_schema import ChatStreamRequest
 
 logger = get_logger(__name__)
@@ -73,6 +74,7 @@ class ChatService:
         self.msg_repo = MessageRepository(session)
         self.agent_repo = AgentConfigRepository(session)
         self.persona_repo = AgentPersonaRepository(session)
+        self.skill_repo = SkillRepository(session)
 
     async def _ensure_conversation(
         self, user_id: uuid.UUID, body: ChatStreamRequest
@@ -106,6 +108,34 @@ class ChatService:
                 out.append(AIMessage(content=m.content))
         return out
 
+    @staticmethod
+    def _compose_system_prompt(persona, skill) -> str:
+        """组装 system prompt：角色卡人设 + 技能任务提示词 + few-shot 示例（叠加）。
+
+        角色卡定「我是谁」，技能叠加「我现在干什么专项任务」。两者可组合。
+        """
+        parts: list[str] = []
+        persona_prompt = (persona.system_prompt.strip() if persona else "") or ""
+        if persona_prompt:
+            parts.append(persona_prompt)
+        if skill:
+            skill_prompt = (skill.prompt or "").strip()
+            if skill_prompt:
+                parts.append(f"【当前任务能力：{skill.name}】\n{skill_prompt}")
+            # few-shot 示例拼进提示词，稳定该技能输出风格
+            few_shots = (skill.config or {}).get("few_shots") or []
+            examples: list[str] = []
+            for fs in few_shots:
+                if not isinstance(fs, dict):
+                    continue
+                inp = (fs.get("input") or "").strip()
+                out = (fs.get("output") or "").strip()
+                if inp and out:
+                    examples.append(f"示例输入：\n{inp}\n理想输出：\n{out}")
+            if examples:
+                parts.append("参考以下示例的风格作答：\n\n" + "\n\n".join(examples))
+        return "\n\n".join(parts)
+
     async def _build_tools(
         self,
         user_id: uuid.UUID,
@@ -113,12 +143,17 @@ class ChatService:
         body: ChatStreamRequest,
         citations: list[dict],
         stats_holder: dict[str, dict],
+        skill=None,
     ) -> list:
         """构建启用的工具列表。
 
         工具启停统一由「工具配置页」(tool_configs) 管理，这里不再读 agent 的工具开关；
         仅把对话页本轮的临时开关（如联网）作为 override 传入，优先级最高。
         stats_holder 由调用方持有，工具执行时回写，编排器在 tool_result 事件读取并清空。
+
+        skill（本轮挂载的技能）若存在：
+        - tool_keys 非空 → 工具白名单：只启用白名单内的工具（其余全部关闭，覆盖全局配置）。
+        - kb_id 非空 → 知识库检索范围限定到该库（优先于对话页启用的库集合）。
         """
         overrides: dict[str, bool] = {}
         if body.enable_knowledge is not None:
@@ -127,14 +162,26 @@ class ChatService:
             overrides["memory_search"] = body.enable_memory
         if body.enable_web_search is not None:
             overrides["web_search"] = body.enable_web_search
-        # 知识库检索范围：取用户「已启用检索」的库集合（在知识库管理里勾选）
+
+        # 技能工具白名单：勾了就只用这些工具（关掉其余干扰），优先级最高
+        if skill and (skill.tool_keys or []):
+            from app.core.agent.tools.base import BUILTIN_REGISTRY
+
+            whitelist = set(skill.tool_keys)
+            for key in BUILTIN_REGISTRY:
+                overrides[key] = key in whitelist
+
+        # 知识库检索范围：技能绑了库优先，否则取用户「已启用检索」的库集合
         from app.repositories.knowledge_base_repository import (
             KnowledgeBaseRepository,
         )
 
-        kb_ids = await KnowledgeBaseRepository(self.session).list_chat_enabled_ids(
-            user_id
-        )
+        if skill and skill.kb_id:
+            kb_ids = [str(skill.kb_id)]
+        else:
+            kb_ids = await KnowledgeBaseRepository(self.session).list_chat_enabled_ids(
+                user_id
+            )
         return await build_enabled_tools(
             self.session,
             user_id,
@@ -174,13 +221,19 @@ class ChatService:
             # 当前生效的人格（角色卡）：提供 system_prompt 与 temperature
             persona = await self.persona_repo.get_active(user_id)
             temperature = persona.temperature if persona else 0.7
+            # 本轮挂载的技能（任务能力包）：叠加提示词 + 工具白名单 + 知识库范围
+            skill = None
+            if body.skill_id:
+                skill = await self.skill_repo.get(user_id, body.skill_id)
             model, config = await build_default_chat_model(
                 self.session, user_id, temperature=temperature, streaming=True
             )
-            system_prompt = (persona.system_prompt.strip() if persona else "") or ""
+            system_prompt = self._compose_system_prompt(persona, skill)
             citations: list[dict] = []
             stats_holder: dict[str, dict] = {}
-            tools = await self._build_tools(user_id, agent, body, citations, stats_holder)
+            tools = await self._build_tools(
+                user_id, agent, body, citations, stats_holder, skill=skill
+            )
             history = await self._history_messages(conv.id)
         except Exception as e:
             yield _sse("error", {"message": str(e)})

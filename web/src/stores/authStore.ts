@@ -42,6 +42,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const { data } = await authApi.me()
       set({ user: data })
+    } catch {
+      // 拉取用户失败（token 失效 / 后端重启期间请求被丢弃等）：
+      // 清掉本地 token，让路由守卫回落到登录页，避免一直转圈
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
+      set({ user: null })
     } finally {
       set({ loading: false })
     }

@@ -66,6 +66,7 @@ export interface ChatMessage {
 export interface SendOptions {
   conversationId?: string
   message: string
+  skillId?: string | null
   imageKeys?: string[]
   attachments?: ChatAttachment[]
   enableKnowledge?: boolean
@@ -147,6 +148,7 @@ export async function streamChat(
     {
       conversation_id: opts.conversationId ?? null,
       message: opts.message,
+      skill_id: opts.skillId ?? null,
       image_keys: opts.imageKeys ?? [],
       attachments: opts.attachments ?? [],
       enable_knowledge: opts.enableKnowledge ?? null,
