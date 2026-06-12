@@ -247,8 +247,15 @@ export default function ChatPage() {
   useEffect(() => {
     const conv = params.get('conversation')
     const msg = params.get('message')
+    const prefill = params.get('prefill')
     if (conv) {
       openConversation(conv, msg ?? undefined)
+      setParams({}, { replace: true })
+    } else if (prefill) {
+      // 从今日回顾「聊聊」跳来：新开对话并把关怀句预填进输入框
+      newConversation()
+      setInput(prefill)
+      setTimeout(() => inputRef.current?.focus(), 0)
       setParams({}, { replace: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

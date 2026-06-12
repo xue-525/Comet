@@ -26,6 +26,8 @@ class DailyReview(Base):
     )
     review_date: Mapped[date] = mapped_column(Date, index=True)
     content: Mapped[str] = mapped_column(Text)  # 简报正文（Markdown）
+    # 前瞻关怀句：基于情绪+记忆+洞察生成的一句主动关心/提醒（⑧），可点击「聊聊」开聊
+    care: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 统计快照：当日新增对话/记忆/文档数等
     stats: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

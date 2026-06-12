@@ -168,6 +168,50 @@ class DailyReviewService:
         logger.warning("每日回顾两次均未生成有效内容，用兜底文案")
         return fallback
 
+    async def _generate_care(self, user_id: uuid.UUID, data: dict) -> str:
+        """生成一句前瞻关怀/提醒（消费情绪 + 洞察 + 记忆）。失败返回空串。"""
+        from app.core.llm.resolver import get_optional_client_for_type
+
+        client = await get_optional_client_for_type(self.session, user_id, "chat")
+        if not client:
+            return ""
+        try:
+            mood = await self._collect_mood(user_id)
+            insights = await self._collect_insights(user_id)
+            recent_parts = (data.get("messages") or [])[:5]
+            recent = "；".join(recent_parts) or "（无）"
+            memories = "；".join((data.get("memories") or [])[:10]) or "（无）"
+            prompt = render_prompt(
+                "daily_care.jinja2",
+                mood=mood or "（暂无情绪数据）",
+                insights=insights or "（暂无）",
+                memories=memories,
+                recent=recent,
+            )
+            text = await client.chat(
+                [{"role": "user", "content": prompt}], temperature=0.8, max_tokens=200
+            )
+            return (text or "").strip().strip('"「」') if text else ""
+        except Exception as e:
+            logger.warning("生成关怀句失败（忽略）: user=%s err=%s", user_id, e)
+            return ""
+
+    async def _collect_insights(self, user_id: uuid.UUID) -> str:
+        """取「AI 眼中的你」高层洞察，拼成一句话；无则空串。"""
+        try:
+            from app.repositories.neo4j.memory_graph_repository import (
+                MemoryGraphRepository,
+            )
+
+            rows = await MemoryGraphRepository().list_insights(str(user_id))
+            contents = [
+                (r.get("content") or "").strip() for r in rows[:3]
+            ]
+            return "；".join(c for c in contents if c)
+        except Exception as e:
+            logger.warning("收集洞察失败（忽略）: %s", e)
+            return ""
+
     async def get_or_generate(self, user_id: uuid.UUID, day: date | None = None) -> dict:
         """生成/刷新当天回顾。
 
@@ -200,15 +244,17 @@ class DailyReviewService:
             return self.to_out_dict(existing)
 
         content = await self._generate_content(user_id, data)
+        care = await self._generate_care(user_id, data)
         if existing:
             existing.content = content
+            existing.care = care
             existing.stats = stats
             await self.session.commit()
             await self.session.refresh(existing)
             return self.to_out_dict(existing)
 
         review = DailyReview(
-            user_id=user_id, review_date=day, content=content, stats=stats
+            user_id=user_id, review_date=day, content=content, care=care, stats=stats
         )
         self.session.add(review)
         await self.session.commit()
@@ -228,6 +274,7 @@ class DailyReviewService:
         return {
             "date": review.review_date.isoformat(),
             "content": review.content,
+            "care": review.care or "",
             "stats": review.stats,
             "created_at": review.created_at.isoformat() if review.created_at else None,
         }

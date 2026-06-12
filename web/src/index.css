@@ -3250,3 +3250,29 @@ body {
     margin: 0 auto !important;
   }
 }
+
+/* 今日回顾：前瞻关怀句 + 聊聊 */
+.daily-care {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: linear-gradient(120deg, #fff7e6 0%, #fff1f0 100%);
+  border: 1px solid #ffe7ba;
+}
+.daily-care-text {
+  color: #874d00;
+  font-size: 14px;
+  line-height: 1.6;
+  flex: 1;
+}
+@media (max-width: 768px) {
+  .daily-care {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+}

@@ -258,6 +258,22 @@ export default function HomePage() {
         <p style={{ margin: 0, color: '#475467', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
           {review?.content ?? '加载中…'}
         </p>
+        {review?.care && (
+          <div className="daily-care">
+            <span className="daily-care-text">💛 {review.care}</span>
+            <Button
+              size="small"
+              type="primary"
+              ghost
+              icon={<CommentOutlined />}
+              onClick={() =>
+                navigate(`/chat?prefill=${encodeURIComponent(review.care ?? '')}`)
+              }
+            >
+              聊聊
+            </Button>
+          </div>
+        )}
       </Card>
 
       {/* 快速开始 */}
