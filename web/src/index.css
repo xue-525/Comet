@@ -10,16 +10,11 @@ body,
   height: 100%;
 }
 
-/* 全局整体缩放：在浏览器 100% 缩放下得到舒适比例，
-   统一缩放包括硬编码 px 的元素，避免逐个改 px。
-   配合下方把所有 100vh 改为 100%（跟随被缩放的容器），
-   不依赖视口高度计算，故不会出现底部留白或跨浏览器误差。
-   仅桌面端启用；手机屏本身就小，再缩放反而字太小，故 768px 以下取消。 */
-@media (min-width: 769px) {
-  #root {
-    zoom: 0.75;
-  }
-}
+/* 自适应策略（企业级流式布局）：
+   不使用整体 zoom 缩放（zoom 是固定倍数，无法适应不同尺寸屏幕，且污染 vh/fixed/滚动条）。
+   改为：字号/间距用固定 px（所有屏幕一致、符合用户预期）+ 布局靠 flex / max-width 居中流动。
+   小屏占满宽度，大屏内容居中、两侧留白；多列卡片用 AntD Row/Col 断点降列。
+   详见 .kiro/steering/01-编码规范.md「自适应布局」。 */
 
 body {
   font-family: 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI',
@@ -116,15 +111,18 @@ body {
 }
 
 
-/* 自适应内容容器：小屏占满、宽屏收拢居中（max-width 用 rem 随字号缩放） */
+/* 自适应内容容器：小屏占满、宽屏收拢居中。
+   用 px 固定上限（企业级后台常规内容宽度），不依赖 zoom/根字号缩放。
+   .fluid-page  常规列表/表单/卡片页（≈1200px 居中）
+   .fluid-narrow 阅读型窄栏（对话/长文，≈760px 居中） */
 .fluid-page {
   width: 100%;
-  max-width: 64rem;
+  max-width: 1200px;
   margin-inline: auto;
 }
 .fluid-narrow {
   width: 100%;
-  max-width: 50rem;
+  max-width: 760px;
   margin-inline: auto;
 }
 

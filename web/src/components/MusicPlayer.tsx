@@ -94,8 +94,6 @@ export default function MusicPlayer() {
   }, [])
 
   // 拖动：按住顶部条移动播放器（仅桌面端）。
-  // 注意全局 #root 有 zoom 缩放，getBoundingClientRect 是屏幕像素、CSS left/top 是缩放前坐标，
-  // 二者差一个 zoom 比例，需换算，否则一拖就飞。
   const onDragStart = (e: ReactMouseEvent) => {
     if (isMobile) return
     const target = e.target as HTMLElement
@@ -103,11 +101,8 @@ export default function MusicPlayer() {
     const el = shellRef.current
     if (!el) return
     const rect = el.getBoundingClientRect()
-    // zoom 比例 = 渲染宽(屏幕px) / 布局宽(CSS px)
-    const zoom = el.offsetWidth ? rect.width / el.offsetWidth : 1
-    // 起始位置换算到 CSS 坐标系
-    const startLeft = rect.left / zoom
-    const startTop = rect.top / zoom
+    const startLeft = rect.left
+    const startTop = rect.top
     const startMouseX = e.clientX
     const startMouseY = e.clientY
     dragRef.current = { dx: 0, dy: 0 }
@@ -116,11 +111,10 @@ export default function MusicPlayer() {
       if (!dragRef.current) return
       const cssW = el.offsetWidth
       const cssH = el.offsetHeight
-      const viewW = window.innerWidth / zoom
-      const viewH = window.innerHeight / zoom
-      // 鼠标位移(屏幕px)换算回 CSS px
-      let x = startLeft + (ev.clientX - startMouseX) / zoom
-      let y = startTop + (ev.clientY - startMouseY) / zoom
+      const viewW = window.innerWidth
+      const viewH = window.innerHeight
+      let x = startLeft + (ev.clientX - startMouseX)
+      let y = startTop + (ev.clientY - startMouseY)
       x = Math.max(8, Math.min(x, viewW - cssW - 8))
       y = Math.max(8, Math.min(y, viewH - cssH - 8))
       setPos({ x, y })
