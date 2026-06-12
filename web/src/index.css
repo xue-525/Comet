@@ -3324,3 +3324,122 @@ body {
   height: 16px;
   background: rgba(255, 255, 255, 0.2);
 }
+
+/* 对话分享按钮（对话区右上角悬浮） */
+.chat-share-btn {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  z-index: 20;
+  border-radius: 999px;
+  box-shadow: 0 4px 14px -6px rgba(16, 24, 40, 0.25);
+}
+
+/* 分享公开查看页 */
+.share-loading {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.share-page {
+  min-height: 100vh;
+  background: #f5f7fb;
+  padding: 24px 16px;
+}
+.share-container {
+  max-width: 820px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px -20px rgba(16, 24, 40, 0.25);
+  overflow: hidden;
+}
+.share-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 24px;
+  border-bottom: 1px solid #f0f0f0;
+  background: linear-gradient(120deg, #155eef 0%, #22d3ee 100%);
+}
+.share-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+.share-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+.share-sub {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  margin-top: 2px;
+}
+.share-body {
+  padding: 24px;
+}
+.share-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.share-msg-user {
+  flex-direction: row-reverse;
+}
+.share-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+.share-avatar-user {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #155eef, #2f7bff);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+.share-avatar-ai {
+  border: 1px solid #eef0f4;
+  background: #fff;
+}
+.share-msg-user .share-bubble {
+  background: #eef4ff;
+  color: #1d2129;
+}
+.share-msg-ai .share-bubble {
+  background: #f7f8fa;
+  color: #1d2129;
+}
+.share-bubble {
+  display: inline-block;
+  max-width: calc(100% - 44px);
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 15px;
+  line-height: 1.75;
+}
+.share-footer {
+  text-align: center;
+  padding: 16px;
+  font-size: 13px;
+  color: #98a2b3;
+  border-top: 1px solid #f0f0f0;
+}
+.share-footer a {
+  color: #155eef;
+  cursor: pointer;
+}
+@media (max-width: 768px) {
+  .share-bubble {
+    max-width: 100%;
+  }
+}

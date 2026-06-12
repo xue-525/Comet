@@ -16,6 +16,7 @@ import ToolConfigPage from './pages/ToolConfigPage'
 import SearchPage from './pages/SearchPage'
 import FavoritesPage from './pages/FavoritesPage'
 import ProfilePage from './pages/ProfilePage'
+import SharePage from './pages/SharePage'
 import RequireAuth from './components/RequireAuth'
 
 // 阶段1：登录页 + 路由守卫；主布局需登录后访问
@@ -24,6 +25,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/s/:token" element={<SharePage />} />
         <Route
           path="/"
           element={

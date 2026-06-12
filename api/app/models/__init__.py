@@ -6,6 +6,7 @@
 from app.models.agent_config_model import AgentConfig
 from app.models.agent_persona_model import AgentPersona
 from app.models.conversation_model import Conversation, Message
+from app.models.conversation_share_model import ConversationShare
 from app.models.daily_review_model import DailyReview
 from app.models.document_model import Document
 from app.models.emotion_model import EmotionProfile, EmotionRecord
@@ -28,6 +29,7 @@ __all__ = [
     "AgentPersona",
     "Conversation",
     "Message",
+    "ConversationShare",
     "DailyReview",
     "Document",
     "EmotionProfile",

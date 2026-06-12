@@ -10,6 +10,7 @@ from app.controllers import (
     agent_persona_controller,
     auth_controller,
     chat_controller,
+    conversation_share_controller,
     dashboard_controller,
     document_controller,
     emotion_controller,
@@ -49,3 +50,5 @@ api_router.include_router(dashboard_controller.router)
 api_router.include_router(emotion_controller.router)
 api_router.include_router(music_controller.router)
 api_router.include_router(skill_controller.router)
+api_router.include_router(conversation_share_controller.router)
+api_router.include_router(conversation_share_controller.public_router)

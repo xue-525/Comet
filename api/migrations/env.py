@@ -13,6 +13,7 @@ from app.db.postgres import Base
 from app.models import (  # noqa: F401
     agent_config_model,
     conversation_model,
+    conversation_share_model,
     daily_review_model,
     document_model,
     emotion_model,

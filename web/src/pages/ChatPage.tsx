@@ -24,6 +24,7 @@ import {
   PlusOutlined,
   RightOutlined,
   SendOutlined,
+  ShareAltOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons'
 import {
@@ -39,6 +40,7 @@ import { favoriteApi } from '@/api/favorites'
 import { AuthenticatedImage } from '@/components/AuthenticatedImage'
 import MessageItem from './chat/MessageItem'
 import SelectionPopover from './chat/SelectionPopover'
+import ShareModal from './chat/ShareModal'
 import type { ChatAvatars, UiMessage } from './chat/types'
 import { groupConversationsByDate } from './chat/groupByDate'
 import { useMusicStore } from '@/stores/musicStore'
@@ -73,6 +75,7 @@ export default function ChatPage() {
     () => typeof window !== 'undefined' && window.innerWidth <= 768,
   )
   const [convDrawerOpen, setConvDrawerOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   // 播放器可见时，输入区在手机上需上移避让
   const playerVisible = useMusicStore((s) => s.visible)
   // 技能（任务能力包）：对话中可挂载/切换
@@ -713,6 +716,18 @@ export default function ChatPage() {
             </div>
           </div>
         )}
+        {/* 分享当前会话（有消息时显示） */}
+        {activeId && messages.length > 0 && (
+          <Tooltip title="分享这段对话">
+            <Button
+              className="chat-share-btn"
+              icon={<ShareAltOutlined />}
+              onClick={() => setShareOpen(true)}
+            >
+              分享
+            </Button>
+          </Tooltip>
+        )}
         <div ref={scrollRef} className="chat-scroll" style={{ flex: 1, overflowY: 'auto', padding: '28px 0' }}>
           {messages.length === 0 ? (
             <div className="chat-empty">
@@ -1015,6 +1030,13 @@ export default function ChatPage() {
 
       {/* 划词追问：选中 AI 回答片段浮出「追问/解释」 */}
       <SelectionPopover onAsk={onQuoteAsk} />
+
+      {/* 分享对话弹窗 */}
+      <ShareModal
+        open={shareOpen}
+        conversationId={activeId}
+        onClose={() => setShareOpen(false)}
+      />
     </div>
   )
 }
