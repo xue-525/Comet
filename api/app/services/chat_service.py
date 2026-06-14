@@ -280,47 +280,53 @@ class ChatService:
         生成中重连还能续传（见 resume_events）。
         """
         user_text = body.message.strip()
+        # 前置 PG 工作（建会话 + 落 user 消息）用「用完即关」的独立 session，
+        # 避免请求依赖 session 在整个转发期间被挂着——转发只用 Redis，不占 PG 连接，
+        # 客户端断开也不会留下未归还的连接（修 GC 回收连接告警）。
+        attachments = [
+            {"file_name": a.file_name, "text": a.text} for a in body.attachments if a.text
+        ]
         try:
-            conv = await self._ensure_conversation(user_id, body)
+            async with SessionLocal() as session:
+                svc = ChatService(session)
+                conv = await svc._ensure_conversation(user_id, body)
+                cid = str(conv.id)
+                title = conv.title
+                if not skip_user_message:
+                    # AI 主动开场白（今日回顾「聊聊」）：仅新会话首轮，先把开场白作为
+                    # assistant 消息落库，使其进入对话历史，模型回复时能接住这个话题。
+                    greeting = (body.greeting or "").strip()
+                    if greeting and await svc.msg_repo.count(conv.id) == 0:
+                        await svc.msg_repo.add(
+                            Message(
+                                conversation_id=conv.id,
+                                role=ROLE_ASSISTANT,
+                                content=greeting,
+                            )
+                        )
+                    await svc.msg_repo.add(
+                        Message(
+                            conversation_id=conv.id,
+                            role=ROLE_USER,
+                            content=user_text,
+                            meta_data=self._user_meta(attachments, body.image_keys),
+                        )
+                    )
         except Exception as e:
             yield _sse("error", {"message": str(e)})
             return
 
-        cid = str(conv.id)
-        yield _sse("meta", {"conversation_id": cid, "title": conv.title})
-        # 本轮附件（对话临时文档，不入知识库），存进 user 消息便于后续追问还原
-        attachments = [
-            {"file_name": a.file_name, "text": a.text} for a in body.attachments if a.text
-        ]
-        if not skip_user_message:
-            # AI 主动开场白（今日回顾「聊聊」）：仅新会话首轮，先把开场白作为 assistant 消息落库，
-            # 使其进入对话历史，模型回复时能接住这个话题。
-            greeting = (body.greeting or "").strip()
-            if greeting and await self.msg_repo.count(conv.id) == 0:
-                await self.msg_repo.add(
-                    Message(
-                        conversation_id=conv.id,
-                        role=ROLE_ASSISTANT,
-                        content=greeting,
-                    )
-                )
-            await self.msg_repo.add(
-                Message(
-                    conversation_id=conv.id,
-                    role=ROLE_USER,
-                    content=user_text,
-                    meta_data=self._user_meta(attachments, body.image_keys),
-                )
-            )
+        yield _sse("meta", {"conversation_id": cid, "title": title})
 
         # 先建立订阅再触发生成，消除「token 早于订阅而漏收」的竞态
+        conv_uuid = uuid.UUID(cid)
         pubsub = await bus.open_channel(cid)
         try:
             # 拿回合锁：若已有同会话生成在跑（用户重复发/并发），不重复触发，只转发现有生成
             if await bus.acquire_turn_lock(cid):
                 task = asyncio.create_task(
                     self._run_chat_turn_bg(
-                        user_id, conv.id, body, attachments, skip_user_message
+                        user_id, conv_uuid, body, attachments, skip_user_message
                     )
                 )
                 _BG_TASKS.add(task)
@@ -336,7 +342,9 @@ class ChatService:
     ) -> AsyncGenerator[str, None]:
         """断线重连续传：若该会话正有生成在进行，先补推已生成内容（resume 事件），再续接后续
         token 直到 done/error；没有进行中的生成则发 idle 立即结束。"""
-        conv = await self.conv_repo.get(user_id, conv_id)
+        # 校验会话归属用「用完即关」的独立 session，避免请求依赖 session 在续传期间被挂着
+        async with SessionLocal() as session:
+            conv = await ConversationRepository(session).get(user_id, conv_id)
         if not conv:
             yield _sse("error", {"message": "会话不存在"})
             return

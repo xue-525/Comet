@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dashboard.prompt_renderer import render_prompt
 from app.core.logging import get_logger
+from app.db.postgres import SessionLocal
 from app.models.conversation_model import ROLE_USER, Conversation, Message
 from app.models.daily_review_model import DailyReview
 from app.models.document_model import Document
@@ -18,6 +19,10 @@ from app.models.memory_model import Memory
 from app.models.play_history_model import PlayHistory
 
 logger = get_logger(__name__)
+
+# 后台重生成任务引用集合（防 GC 提前回收）+ 正在生成的 (user, day) 去重集合
+_REVIEW_BG_TASKS: set = set()
+_REVIEW_GENERATING: set = set()
 
 
 class DailyReviewService:
@@ -176,7 +181,7 @@ class DailyReviewService:
             try:
                 text = await client.chat(
                     [{"role": "user", "content": prompt}],
-                    temperature=0.7, max_tokens=1200,
+                    temperature=0.7, max_tokens=600,
                 )
                 if text and text.strip():
                     return text.strip()
@@ -225,20 +230,63 @@ class DailyReviewService:
             logger.warning("收集洞察失败（忽略）: %s", e)
             return ""
 
-    async def get_or_generate(self, user_id: uuid.UUID, day: date | None = None) -> dict:
-        """生成/刷新当天回顾。
+    @staticmethod
+    def _instant_content(data: dict) -> str:
+        """即时（非 LLM）兜底简报：用统计数拼一句话，供首屏秒显，后台再补全 LLM 正文。"""
+        songs = data.get("songs", [])
+        total = (
+            len(data["messages"])
+            + len(data["memories"])
+            + len(data["documents"])
+            + len(songs)
+        )
+        if total == 0:
+            return "今天还没有新动态，休息一下也很好 🌿"
+        return (
+            f"今天有 {len(data['messages'])} 次提问、"
+            f"记住了 {len(data['memories'])} 件事、"
+            f"新增了 {len(data['documents'])} 份文档、"
+            f"听了 {len(songs)} 首歌。"
+        )
 
-        每次进入仪表盘都按当前最新活动重新采集：
-        - 当天数据有变化（统计数变了）就重新生成并覆盖；
-        - 数据没变则复用已有回顾，避免重复调用 LLM。
-        """
-        day = day or date.today()
-        existing = await self.session.scalar(
+    async def _upsert(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        day: date,
+        content: str,
+        care: str,
+        stats: dict,
+    ) -> DailyReview:
+        """插入或更新当天回顾记录。"""
+        existing = await session.scalar(
             select(DailyReview).where(
                 DailyReview.user_id == user_id, DailyReview.review_date == day
             )
         )
+        if existing:
+            existing.content = content
+            existing.care = care
+            existing.stats = stats
+            await session.commit()
+            await session.refresh(existing)
+            return existing
+        review = DailyReview(
+            user_id=user_id, review_date=day, content=content, care=care, stats=stats
+        )
+        session.add(review)
+        await session.commit()
+        await session.refresh(review)
+        return review
 
+    async def generate_now(
+        self, user_id: uuid.UUID, day: date | None = None
+    ) -> dict:
+        """同步全量生成当天回顾（采集 + LLM 正文/关怀 + 落库）。
+
+        供 Celery beat 批量生成与后台重生成任务调用——它们本就跑在独立任务里，可以等。
+        """
+        day = day or date.today()
         data = await self._collect(user_id, day)
         stats = {
             "messages": len(data["messages"]),
@@ -246,32 +294,84 @@ class DailyReviewService:
             "documents": len(data["documents"]),
             "songs": len(data.get("songs", [])),
         }
+        content, care = await self._generate_content_and_care(user_id, data)
+        review = await self._upsert(self.session, user_id, day, content, care, stats)
+        return self.to_out_dict(review)
 
+    async def get_or_generate(self, user_id: uuid.UUID, day: date | None = None) -> dict:
+        """仪表盘按需获取当天回顾（非阻塞）。
+
+        - 已有非空回顾且当天活动统计未变 → 直接复用（毫秒级）。
+        - 无活动（total=0）→ 即时兜底文案落库直接返回，不调 LLM。
+        - 否则 → 先把「即时统计文案/旧回顾」秒回，派后台任务异步重生成完整正文，
+          返回体带 generating=True，前端据此轮询拿最终结果。不再让首屏干等 LLM。
+        """
+        day = day or date.today()
+        existing = await self.session.scalar(
+            select(DailyReview).where(
+                DailyReview.user_id == user_id, DailyReview.review_date == day
+            )
+        )
+        data = await self._collect(user_id, day)
+        stats = {
+            "messages": len(data["messages"]),
+            "memories": len(data["memories"]),
+            "documents": len(data["documents"]),
+            "songs": len(data.get("songs", [])),
+        }
+        total = sum(stats.values())
+
+        # 已有非空回顾且活动数据无变化 → 复用
         if (
             existing
             and existing.content
             and existing.content.strip()
             and self._same_stats(existing.stats, stats)
         ):
-            # 已有非空回顾且活动数据无变化，直接复用，不重复调用 LLM
-            return self.to_out_dict(existing)
+            out = self.to_out_dict(existing)
+            out["generating"] = False
+            return out
 
-        content, care = await self._generate_content_and_care(user_id, data)
-        if existing:
-            existing.content = content
-            existing.care = care
-            existing.stats = stats
-            await self.session.commit()
-            await self.session.refresh(existing)
-            return self.to_out_dict(existing)
+        # 无活动：即时兜底，不调 LLM
+        if total == 0:
+            review = await self._upsert(
+                self.session, user_id, day, self._instant_content(data), "", stats
+            )
+            out = self.to_out_dict(review)
+            out["generating"] = False
+            return out
 
-        review = DailyReview(
-            user_id=user_id, review_date=day, content=content, care=care, stats=stats
-        )
-        self.session.add(review)
-        await self.session.commit()
-        await self.session.refresh(review)
-        return self.to_out_dict(review)
+        # 需要(重)生成：先秒回即时内容（无旧回顾时建即时兜底；有旧的则保留旧文案显示），
+        # 再派后台任务异步生成完整正文。
+        if existing and existing.content and existing.content.strip():
+            base = existing
+        else:
+            base = await self._upsert(
+                self.session, user_id, day, self._instant_content(data), "", stats
+            )
+        out = self.to_out_dict(base)
+
+        key = (str(user_id), day.isoformat())
+        if key not in _REVIEW_GENERATING:
+            _REVIEW_GENERATING.add(key)
+            task = asyncio.create_task(self._regenerate_bg(user_id, day))
+            _REVIEW_BG_TASKS.add(task)
+            task.add_done_callback(_REVIEW_BG_TASKS.discard)
+        out["generating"] = True
+        return out
+
+    async def _regenerate_bg(self, user_id: uuid.UUID, day: date) -> None:
+        """后台任务：用独立 session 全量重生成当天回顾。失败记日志，不影响首屏。"""
+        key = (str(user_id), day.isoformat())
+        try:
+            async with SessionLocal() as session:
+                await DailyReviewService(session).generate_now(user_id, day)
+        except Exception as e:
+            logger.error(
+                "每日回顾后台生成失败: user=%s err=%s", user_id, e, exc_info=True
+            )
+        finally:
+            _REVIEW_GENERATING.discard(key)
 
     @staticmethod
     def _same_stats(old: dict | None, new: dict) -> bool:
@@ -288,6 +388,7 @@ class DailyReviewService:
             "content": review.content,
             "care": review.care or "",
             "stats": review.stats,
+            "generating": False,
             "created_at": review.created_at.isoformat() if review.created_at else None,
         }
 

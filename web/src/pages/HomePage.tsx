@@ -44,6 +44,25 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    let cancelled = false
+    let pollTimer: ReturnType<typeof setTimeout> | null = null
+    let polls = 0
+
+    const fetchReview = () => {
+      dashboardApi
+        .dailyReview()
+        .then(({ data }) => {
+          if (cancelled) return
+          setReview(data)
+          // 后台仍在生成完整回顾：轮询拿最终结果（最多 ~10 次，间隔 3s）
+          if (data.generating && polls < 10) {
+            polls += 1
+            pollTimer = setTimeout(fetchReview, 3000)
+          }
+        })
+        .catch(() => {})
+    }
+
     void (async () => {
       setLoading(true)
       try {
@@ -62,10 +81,7 @@ export default function HomePage() {
         .list()
         .then(({ data }) => setModels(data))
         .catch(() => setModels([]))
-      dashboardApi
-        .dailyReview()
-        .then(({ data }) => setReview(data))
-        .catch(() => {})
+      fetchReview()
       emotionApi
         .current()
         .then(({ data }) => setEmotionProfile(data))
@@ -79,6 +95,11 @@ export default function HomePage() {
         .then(({ data }) => setEmotionDist(data.items))
         .catch(() => {})
     })()
+
+    return () => {
+      cancelled = true
+      if (pollTimer) clearTimeout(pollTimer)
+    }
   }, [])
 
   const c = overview?.counts
@@ -276,6 +297,12 @@ export default function HomePage() {
         <p style={{ margin: 0, color: '#475467', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
           {review?.content ?? '加载中…'}
         </p>
+        {review?.generating && (
+          <div style={{ marginTop: 8, color: '#98A2B3', fontSize: 12 }}>
+            <Spin size="small" style={{ marginRight: 6 }} />
+            正在生成今日回顾…
+          </div>
+        )}
         {review?.care && (
           <div className="daily-care">
             <span className="daily-care-text">💛 {review.care}</span>

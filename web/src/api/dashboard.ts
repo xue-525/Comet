@@ -11,6 +11,7 @@ export interface DailyReview {
   content: string
   care?: string
   stats: { messages: number; memories: number; documents: number; songs?: number } | null
+  generating?: boolean
   created_at: string
 }
 

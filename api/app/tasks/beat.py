@@ -32,7 +32,10 @@ async def _run() -> int:
             service = DailyReviewService(session)
             for uid in user_ids:
                 try:
-                    await service.get_or_generate(uid)
+                    # 批量生成走同步全量方法（celery 任务本就可以等），
+                    # 不用 get_or_generate 的「派后台 asyncio 任务」路径——celery 任务
+                    # 的事件循环结束后后台任务会被丢弃。
+                    await service.generate_now(uid)
                     count += 1
                 except Exception as e:
                     logger.warning("用户 %s 每日回顾生成失败: %s", uid, e)
