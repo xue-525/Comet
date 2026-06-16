@@ -1,0 +1,1 @@
+- [Comet 本机跑通配置](comet-local-run-setup.md) — Python 钉3.12、HepAI Claude 500 改用 gpt-4o-mini、embedding 用 bge-m3(1024维)、账号 comet/comet123
